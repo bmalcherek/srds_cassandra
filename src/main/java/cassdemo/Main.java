@@ -23,7 +23,7 @@ public class Main {
 		} catch (IOException ex) {
 			ex.printStackTrace();
 		}
-			
+
 		BackendSession session = new BackendSession(contactPoint, keyspace);
 
 		session.upsertUser("PP", "Adam", 609, "A St");

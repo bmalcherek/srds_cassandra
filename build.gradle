@@ -32,11 +32,11 @@ repositories {
 }
 
 dependencies {
-  compile group: 'org.slf4j', name: 'slf4j-api', version: '1.7.+'
-  compile group: 'ch.qos.logback', name: 'logback-classic', version: '1.+'
+  implementation  group: 'org.slf4j', name: 'slf4j-api', version: '1.7.+'
+  implementation  group: 'ch.qos.logback', name: 'logback-classic', version: '1.+'
 
-  compile 'com.datastax.cassandra:cassandra-driver-core:3.3.0'
-  compile 'org.apache.cassandra:cassandra-all:3.11.8'
+  implementation  'com.datastax.cassandra:cassandra-driver-core:3.3.0'
+  implementation  'org.apache.cassandra:cassandra-all:3.11.8'
 }
 
 configurations.all {
