@@ -70,7 +70,7 @@ func createGame(session *gocqlx.Session, date int64, capacity int, stadiumName, 
 			seat = 0
 		}
 
-		batch.Query(stmt, gameId, fmt.Sprintf("%02d-%02d-%02d", sector, row, seat), rand.Intn(200))
+		batch.Query(stmt, gameId, fmt.Sprintf("%04d-%02d-%02d", sector, row, seat), rand.Intn(200))
 		if i%100 == 0 {
 			err = session.ExecuteBatch(batch)
 			if err != nil {
@@ -94,55 +94,75 @@ func createGame(session *gocqlx.Session, date int64, capacity int, stadiumName, 
 	}
 
 	fmt.Println(len(gameReservations))
+}
 
-	// err := session.Query()
+func reserveRandomSeat(session *gocqlx.Session, id int) {
+	for {
+		var availableGames []models.Game
+		q := session.Query(models.Games.SelectAll())
+		if err := q.SelectRelease(&availableGames); err != nil {
+			panic(err)
+		}
+
+		game := availableGames[rand.Intn(len(availableGames))]
+
+		var seats []models.GameReservation
+		q = session.Query(models.GameReservations.Select()).BindMap(qb.M{"game_id": game.GameId})
+		if err := q.SelectRelease(&seats); err != nil {
+			panic(err)
+		}
+
+		var emptySeats []models.GameReservation
+		for _, seat := range seats {
+			if seat.SeatOwner == "" {
+				emptySeats = append(emptySeats, seat)
+			}
+		}
+
+		if len(emptySeats) == 0 {
+			fmt.Println("No empty seats")
+			continue
+		}
+		seatToReserve := emptySeats[rand.Intn(len(emptySeats))]
+		seatToReserve.SeatOwner = fmt.Sprintf("%d", id)
+		q = session.Query(models.GameReservations.Insert()).BindStruct(seatToReserve)
+		if err := q.ExecRelease(); err != nil {
+			panic(err)
+		}
+
+		checkSeat := models.GameReservation{
+			GameId: seatToReserve.GameId,
+		}
+		q = session.Query(models.GameReservations.Get()).BindStruct(checkSeat)
+		if err := q.GetRelease(&checkSeat); err != nil {
+			panic(err)
+		}
+
+		if checkSeat.SeatOwner != fmt.Sprintf("%d", id) {
+			fmt.Println("ERROROROROROROR")
+		}
+
+		fmt.Println(game, len(seats), len(emptySeats))
+	}
 }
 
 func main() {
 	cluster := gocql.NewCluster("127.0.0.1")
 	cluster.Keyspace = "test"
 
-	// session
-	// session, err := cluster.CreateSession()
 	session, err := gocqlx.WrapSession(cluster.CreateSession())
 	if err != nil {
 		panic(err)
 	}
 	defer session.Close()
 
-	createGame(&session, time.Now().Unix()*1000, 700, "Lusail Iconic Stadium", "Nigeria", "Germany")
+	endChan := make(chan (bool))
 
-	// ctx := context.Background()
+	createGame(&session, time.Now().Unix()*1000, 100, "Lusail Iconic Stadium", "Nigeria", "Germany")
 
-	// gameMetadata := table.Metadata{
-	// 	Name:    "games",
-	// 	Columns: []string{"game_id", "game_date", "game_team1", "game_team2", "stadium_name", "capacity"},
-	// 	PartKey: []string{"game_id"},
-	// }
+	for i := 0; i < 5; i++ {
+		go reserveRandomSeat(&session, i)
+	}
 
-	// gameTable := table.New(gameMetadata)
-
-	// type Game struct {
-	// 	GameId      string
-	// 	GameDate    int64
-	// 	GameTeam1   string
-	// 	GameTeam2   string
-	// 	StadiumName string
-	// 	Capacity    int
-	// }
-
-	// g := Game{
-	// 	GameId:      "cd97ff90-7191-11ec-8d7e-5b0fd7190d80",
-	// 	GameDate:    1641933312,
-	// 	GameTeam1:   "Nigeria",
-	// 	GameTeam2:   "Germany",
-	// 	StadiumName: "Lusail",
-	// 	Capacity:    80000,
-	// }
-
-	// q := session.Query(gameTable.Insert()).BindStruct(g)
-	// if err := q.ExecRelease(); err != nil {
-	// 	panic(err)
-	// }
-
+	<-endChan
 }
