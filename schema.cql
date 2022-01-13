@@ -1,11 +1,21 @@
-CREATE TABLE games (
-    stadium_name text,
+CREATE TABLE games_by_stadiums (
     game_id uuid,
     game_date timestamp,
     game_team1 text,
     game_team2 text,
+    stadium_name text,
     capacity int,
     PRIMARY KEY (stadium_name, game_id)
+);
+
+CREATE TABLE games (
+    game_id uuid,
+    game_date timestamp,
+    game_team1 text,
+    game_team2 text,
+    stadium_name text,
+    capacity int,
+    PRIMARY KEY (game_id)
 );
 
 INSERT INTO games (stadium_name, game_id, game_date, game_team1, game_team2, capacity) VALUES ('Lusail Iconic Stadium', cd97ff90-7191-11ec-8d7e-5b0fd7190d80, 1641933312, 'Nigeria', 'Germany', 80000);
