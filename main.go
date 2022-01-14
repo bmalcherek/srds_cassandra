@@ -3,91 +3,12 @@ package main
 import (
 	"fmt"
 	"math/rand"
-	"time"
 
 	"github.com/bmalcherek/srds_cassandra/models"
 	"github.com/gocql/gocql"
 	"github.com/scylladb/gocqlx/v2"
 	"github.com/scylladb/gocqlx/v2/qb"
 )
-
-const (
-	sectorCapacity int = 5000
-	sectorRowCount int = 50
-	rowSeatCount   int = 100
-)
-
-func createGame(session *gocqlx.Session, date int64, capacity int, stadiumName, team1, team2 string) {
-	gameId, err := gocql.RandomUUID()
-	if err != nil {
-		panic(err)
-	}
-	g := models.Game{
-		GameId:      gameId,
-		GameDate:    date,
-		GameTeam1:   team1,
-		GameTeam2:   team2,
-		StadiumName: stadiumName,
-		Capacity:    capacity,
-	}
-
-	q := session.Query(models.Games.Insert()).BindStruct(g)
-	if err := q.ExecRelease(); err != nil {
-		panic(err)
-	}
-
-	// stmt, _ := qb.Select("gocqlx_test.bench_person").Columns(benchPersonCols...).Where(qb.Eq("id")).Limit(1).ToCql()
-	selectG := models.Game{
-		GameId: gameId,
-	}
-	qu := session.Query(models.Games.Get()).BindStruct(selectG)
-	if err := qu.GetRelease(&selectG); err != nil {
-		panic(err)
-	}
-	fmt.Println(selectG)
-
-	batch := session.NewBatch(gocql.LoggedBatch)
-	stmt := `INSERT INTO game_reservations (game_id, seat_id, seat_price) VALUES (?, ?, ?)`
-
-	sector := 0
-	row := 0
-	seat := 0
-	for i := 0; i < capacity; i++ {
-		if i%sectorCapacity == 0 {
-			sector += 1
-			row = 0
-			seat = 0
-		}
-		if i%rowSeatCount == 0 && i%sectorCapacity != 0 {
-			row += 1
-			seat = 0
-		}
-
-		batch.Query(stmt, gameId, fmt.Sprintf("%04d-%02d-%02d", sector, row, seat), rand.Intn(200))
-		if i%100 == 0 {
-			err = session.ExecuteBatch(batch)
-			if err != nil {
-				panic(err)
-			}
-			batch = session.NewBatch(gocql.LoggedBatch)
-		}
-
-		seat += 1
-	}
-	err = session.ExecuteBatch(batch)
-	if err != nil {
-		panic(err)
-	}
-
-	var gameReservations []models.GameReservation
-
-	q1 := session.Query(models.GameReservations.Select()).BindMap(qb.M{"game_id": gameId})
-	if err = q1.SelectRelease(&gameReservations); err != nil {
-		panic(err)
-	}
-
-	fmt.Println(len(gameReservations))
-}
 
 func reserveRandomSeat(session *gocqlx.Session, id int) {
 	for {
@@ -137,6 +58,34 @@ func reserveRandomSeat(session *gocqlx.Session, id int) {
 		}
 
 		// fmt.Println(game, len(seats), len(emptySeats))
+	}
+}
+
+func logger(session *gocqlx.Session) {
+
+	var availableGames []models.Game
+	q := session.Query(models.Games.SelectAll())
+	if err := q.SelectRelease(&availableGames); err != nil {
+		panic(err)
+	}
+	for {
+		for _, game := range availableGames {
+			var seats []models.GameReservation
+			q = session.Query(models.GameReservations.Select()).BindMap(qb.M{"game_id": game.GameId})
+			if err := q.SelectRelease(&seats); err != nil {
+				panic(err)
+			}
+
+			var emptySeats []models.GameReservation
+			for _, seat := range seats {
+				if seat.SeatOwner == "" {
+					emptySeats = append(emptySeats, seat)
+				}
+			}
+
+			ratio := float32(len(emptySeats)) / float32(game.Capacity)
+			fmt.Printf("%v, %s, %s, tickets left: %f\n", game.GameId, game.GameTeam1, game.GameTeam2, ratio)
+		}
 	}
 }
 
@@ -212,7 +161,7 @@ func main() {
 		panic(err)
 	}
 
-	initTables(&session)
+	// initTables(&session)
 	session.Close()
 
 	cluster.Keyspace = "tickets"
@@ -224,11 +173,12 @@ func main() {
 
 	endChan := make(chan (bool))
 
-	createGame(&session, time.Now().Unix()*1000, 100, "Lusail Iconic Stadium", "Nigeria", "Germany")
+	// matches.CreateMatches(&session)
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 10; i++ {
 		go reserveRandomSeat(&session, i)
 	}
+	go logger(&session)
 
 	<-endChan
 }

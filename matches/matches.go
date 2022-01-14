@@ -1,0 +1,179 @@
+package matches
+
+import (
+	"fmt"
+	"math/rand"
+	"time"
+
+	"github.com/bmalcherek/srds_cassandra/models"
+	"github.com/gocql/gocql"
+	"github.com/scylladb/gocqlx/v2"
+)
+
+const (
+	sectorCapacity int = 5000
+	sectorRowCount int = 50
+	rowSeatCount   int = 100
+)
+
+func createGame(session *gocqlx.Session, capacity int, stadiumName, team1, team2 string) {
+	gameId, err := gocql.RandomUUID()
+	if err != nil {
+		panic(err)
+	}
+	g := models.Game{
+		GameId:      gameId,
+		GameDate:    time.Now().Unix() * 1000,
+		GameTeam1:   team1,
+		GameTeam2:   team2,
+		StadiumName: stadiumName,
+		Capacity:    capacity,
+	}
+
+	q := session.Query(models.Games.Insert()).BindStruct(g)
+	if err := q.ExecRelease(); err != nil {
+		panic(err)
+	}
+
+	q = session.Query(models.GamesByStadiums.Insert()).BindStruct(g)
+	if err := q.ExecRelease(); err != nil {
+		panic(err)
+	}
+
+	selectG := models.Game{
+		GameId: gameId,
+	}
+	qu := session.Query(models.Games.Get()).BindStruct(selectG)
+	if err := qu.GetRelease(&selectG); err != nil {
+		panic(err)
+	}
+
+	batch := session.NewBatch(gocql.LoggedBatch)
+	stmt := `INSERT INTO game_reservations (game_id, seat_id, seat_price) VALUES (?, ?, ?)`
+
+	sector := 0
+	row := 0
+	seat := 0
+	for i := 0; i < capacity; i++ {
+		if i%sectorCapacity == 0 {
+			sector += 1
+			row = 0
+			seat = 0
+		}
+		if i%rowSeatCount == 0 && i%sectorCapacity != 0 {
+			row += 1
+			seat = 0
+		}
+
+		batch.Query(stmt, gameId, fmt.Sprintf("%04d-%02d-%02d", sector, row, seat), rand.Intn(200))
+		if i%100 == 0 {
+			err = session.ExecuteBatch(batch)
+			if err != nil {
+				panic(err)
+			}
+			batch = session.NewBatch(gocql.LoggedBatch)
+		}
+
+		seat += 1
+	}
+	err = session.ExecuteBatch(batch)
+	if err != nil {
+		panic(err)
+	}
+
+	// var gameReservations []models.GameReservation
+
+	// q1 := session.Query(models.GameReservations.Select()).BindMap(qb.M{"game_id": gameId})
+	// if err = q1.SelectRelease(&gameReservations); err != nil {
+	// 	panic(err)
+	// }
+
+	// fmt.Println(len(gameReservations))
+}
+
+func groupA(session *gocqlx.Session) {
+	createGame(session, 78011, "Luzhniki Stadium", "Russia", "Saudi Arabia")
+	createGame(session, 27015, "Central Stadium", "Egypt", "Uruguay")
+	createGame(session, 64468, "Krestovsky Stadium", "Russia", "Egypt")
+	createGame(session, 42268, "Rostov Arena", "Uruguay", "Saudi Arabia")
+	createGame(session, 41970, "Cosmos Arena", "Uruguay", "Russia")
+	createGame(session, 36823, "Volgograd Arena", "Saudi Arabia", "Egypt")
+	fmt.Println("Group A created...")
+}
+func groupB(session *gocqlx.Session) {
+	createGame(session, 62548, "Krestovsky Stadium", "Morocco", "Iran")
+	createGame(session, 43866, "Fisht Olympic Stadium", "Portugal", "Spain")
+	createGame(session, 78011, "Luzhniki Stadium", "Portugal", "Morocco")
+	createGame(session, 42718, "Kazan Arena", "Iran", "Spain")
+	createGame(session, 41685, "Mordovia Arena", "Iran", "Portugal")
+	createGame(session, 33973, "Kaliningrad Stadium", "Spain", "Morocco")
+	fmt.Println("Group B created...")
+}
+func groupC(session *gocqlx.Session) {
+	createGame(session, 41279, "Kazan Arena", "France", "Australia")
+	createGame(session, 40502, "Mordovia Arena", "Peru", "Denmark")
+	createGame(session, 40727, "Cosmos Arena", "Denmark", "Australia")
+	createGame(session, 32789, "Central Stadium", "France", "Peru")
+	createGame(session, 78011, "Luzhniki Stadium", "Denmark", "France")
+	createGame(session, 44073, "Fisht Olympic Stadium", "Australia", "Peru")
+	fmt.Println("Group C created...")
+}
+
+func groupD(session *gocqlx.Session) {
+	createGame(session, 44190, "Otkritie Arena", "Argentina", "Iceland")
+	createGame(session, 31136, "Kaliningrad Stadium", "Croatia", "Nigeria")
+	createGame(session, 43319, "Nizhny Novgorod Stadium", "Argentina", "Croatia")
+	createGame(session, 40904, "Volgograd Arena", "Nigeria", "Iceland")
+	createGame(session, 64468, "Krestovsky Stadium", "Nigeria", "Argentina")
+	createGame(session, 43372, "Rostov Arena", "Iceland", "Croatia")
+	fmt.Println("Group D created...")
+}
+
+func groupE(session *gocqlx.Session) {
+	createGame(session, 41432, "Cosmos Arena", "Costa Rica", "Serbia")
+	createGame(session, 43109, "Rostov Arena", "Brazil", "Switzerland")
+	createGame(session, 64468, "Krestovsky Stadium", "Brazil", "Costa Rica")
+	createGame(session, 33167, "Kaliningrad Stadium", "Serbia", "Switzerland")
+	createGame(session, 44190, "Otkritie Arena", "Serbia", "Brazil")
+	createGame(session, 43319, "Nizhny Novgorod Stadium", "Switzerland", "Costa Rica")
+	fmt.Println("Group E created...")
+}
+func groupF(session *gocqlx.Session) {
+	createGame(session, 78011, "Luzhniki Stadium", "Germany", "Mexico")
+	createGame(session, 42300, "Nizhny Novgorod Stadium", "Sweden", "South Korea")
+	createGame(session, 43472, "Rostov Arena", "South Korea", "Mexico")
+	createGame(session, 44287, "Fisht Olympic Stadium", "Germany", "Sweden")
+	createGame(session, 41835, "Kazan Arena", "South Korea", "Germany")
+	createGame(session, 33061, "Central Stadium", "Mexico", "Sweden")
+	fmt.Println("Group F created...")
+}
+func groupG(session *gocqlx.Session) {
+	createGame(session, 43257, "Fisht Olympic Stadium", "Belgium", "Panama")
+	createGame(session, 41064, "Volgograd Arena", "Tunisia", "England")
+	createGame(session, 44190, "Otkritie Arena", "Belgium", "Tunisia")
+	createGame(session, 43319, "Nizhny Novgorod Stadium", "England", "Panama")
+	createGame(session, 33973, "Kaliningrad Stadium", "England", "Belgium")
+	createGame(session, 37168, "Mordovia Arena", "Panama", "Tunisia")
+	fmt.Println("Group G created...")
+}
+
+func groupH(session *gocqlx.Session) {
+	createGame(session, 40482, "Mordovia Arena", "Colombia", "Japan")
+	createGame(session, 44190, "Otkritie Arena", "Poland", "Senegal")
+	createGame(session, 32572, "Central Stadium", "Japan", "Senegal")
+	createGame(session, 42873, "Kazan Arena", "Poland", "Colombia")
+	createGame(session, 42189, "Volgograd Arena", "Japan", "Poland")
+	createGame(session, 41970, "Cosmos Arena", "Senegal", "Colombia")
+	fmt.Println("Group H created...")
+}
+
+func CreateMatches(session *gocqlx.Session) {
+	groupA(session)
+	groupB(session)
+	groupC(session)
+	groupD(session)
+	groupE(session)
+	groupF(session)
+	groupG(session)
+	groupH(session)
+}

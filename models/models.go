@@ -39,16 +39,21 @@ var (
 		SortKey: []string{},
 	})
 
-	Stadiums = table.New(table.Metadata{
-		Name: "stadiums",
+	GamesByStadiums = table.New(table.Metadata{
+		Name: "games_by_stadiums",
 		Columns: []string{
-			"city",
-			"max_capacity",
+			"capacity",
+			"game_date",
+			"game_id",
+			"game_team1",
+			"game_team2",
 			"stadium_name",
 		},
 		PartKey: []string{
 			"stadium_name",
 		},
-		SortKey: []string{},
+		SortKey: []string{
+			"game_id",
+		},
 	})
 )
