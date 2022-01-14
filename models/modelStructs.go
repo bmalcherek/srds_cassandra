@@ -3,12 +3,13 @@ package models
 import "github.com/gocql/gocql"
 
 type Game struct {
-	GameId      gocql.UUID
-	GameDate    int64
-	GameTeam1   string
-	GameTeam2   string
-	StadiumName string
-	Capacity    int
+	GameId       gocql.UUID
+	GameDate     int64
+	GameTeam1    string
+	GameTeam2    string
+	StadiumName  string
+	Capacity     int
+	FullCapacity bool
 }
 
 type Stadium struct {

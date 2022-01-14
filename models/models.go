@@ -27,6 +27,7 @@ var (
 		Name: "games",
 		Columns: []string{
 			"capacity",
+			"full_capacity",
 			"game_date",
 			"game_id",
 			"game_team1",
@@ -43,6 +44,7 @@ var (
 		Name: "games_by_stadiums",
 		Columns: []string{
 			"capacity",
+			"full_capacity",
 			"game_date",
 			"game_id",
 			"game_team1",

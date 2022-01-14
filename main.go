@@ -12,7 +12,11 @@ import (
 	"github.com/scylladb/gocqlx/v2/qb"
 )
 
-func reserveRandomSeat(session *gocqlx.Session, id int) {
+const (
+	goroutinesCount int = 10
+)
+
+func reserveRandomSeat(session *gocqlx.Session, id int, endChan chan (bool)) {
 	for {
 		var availableGames []models.Game
 		q := session.Query(models.Games.SelectAll())
@@ -20,7 +24,19 @@ func reserveRandomSeat(session *gocqlx.Session, id int) {
 			panic(err)
 		}
 
-		game := availableGames[rand.Intn(len(availableGames))]
+		notFullGames := []models.Game{}
+		for _, g := range availableGames {
+			if !g.FullCapacity {
+				notFullGames = append(notFullGames, g)
+			}
+		}
+
+		if len(notFullGames) == 0 {
+			endChan <- true
+			return
+		}
+
+		game := notFullGames[rand.Intn(len(notFullGames))]
 
 		var seats []models.GameReservation
 		q = session.Query(models.GameReservations.Select()).BindMap(qb.M{"game_id": game.GameId})
@@ -36,7 +52,11 @@ func reserveRandomSeat(session *gocqlx.Session, id int) {
 		}
 
 		if len(emptySeats) == 0 {
-			// fmt.Println("No empty seats")
+			game.FullCapacity = true
+			q = session.Query(models.Games.Insert()).BindStruct(game)
+			if err := q.ExecRelease(); err != nil {
+				panic(err)
+			}
 			continue
 		}
 		seatToReserve := emptySeats[rand.Intn(len(emptySeats))]
@@ -56,7 +76,7 @@ func reserveRandomSeat(session *gocqlx.Session, id int) {
 		}
 
 		if checkSeat.SeatOwner != fmt.Sprintf("%d", id) {
-			fmt.Println("ERROROROROROROR")
+			fmt.Printf("ERROR!! Expected value: %d, real value: %s\n", id, checkSeat.SeatOwner)
 		}
 
 		// fmt.Println(game, len(seats), len(emptySeats))
@@ -94,7 +114,22 @@ func logger(session *gocqlx.Session) {
 }
 
 func initTables(session *gocqlx.Session) {
-	err := session.ExecStmt(`CREATE KEYSPACE IF NOT EXISTS tickets
+	err := session.ExecStmt("DROP TABLE tickets.games;")
+	if err != nil {
+		panic(err)
+	}
+
+	err = session.ExecStmt("DROP TABLE tickets.games_by_stadiums;")
+	if err != nil {
+		panic(err)
+	}
+
+	err = session.ExecStmt("DROP TABLE tickets.game_reservations;")
+	if err != nil {
+		panic(err)
+	}
+
+	err = session.ExecStmt(`CREATE KEYSPACE IF NOT EXISTS tickets
 		WITH REPLICATION = {
 			'class': 'SimpleStrategy',
 			'replication_factor': 2
@@ -110,6 +145,7 @@ func initTables(session *gocqlx.Session) {
 		game_team2 text,
 		stadium_name text,
 		capacity int,
+		full_capacity boolean,
 		PRIMARY KEY (stadium_name, game_id)
 	);`)
 	if err != nil {
@@ -123,6 +159,7 @@ func initTables(session *gocqlx.Session) {
 		game_team2 text,
 		stadium_name text,
 		capacity int,
+		full_capacity boolean,
 		PRIMARY KEY (game_id)
 	);`)
 	if err != nil {
@@ -137,21 +174,6 @@ func initTables(session *gocqlx.Session) {
 		seat_discount text,
 		PRIMARY KEY (game_id, seat_id)
 	);`)
-	if err != nil {
-		panic(err)
-	}
-
-	err = session.ExecStmt("TRUNCATE tickets.games;")
-	if err != nil {
-		panic(err)
-	}
-
-	err = session.ExecStmt("TRUNCATE tickets.games_by_stadiums;")
-	if err != nil {
-		panic(err)
-	}
-
-	err = session.ExecStmt("TRUNCATE tickets.game_reservations;")
 	if err != nil {
 		panic(err)
 	}
@@ -179,10 +201,12 @@ func main() {
 
 	matches.CreateMatches(&session)
 
-	for i := 0; i < 20; i++ {
-		go reserveRandomSeat(&session, i)
+	for i := 0; i < goroutinesCount; i++ {
+		go reserveRandomSeat(&session, i, endChan)
 	}
 	go logger(&session)
 
-	<-endChan
+	for i := 0; i < goroutinesCount; i++ {
+		<-endChan
+	}
 }
