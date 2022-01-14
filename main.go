@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"time"
 
+	"github.com/bmalcherek/srds_cassandra/matches"
 	"github.com/bmalcherek/srds_cassandra/models"
 	"github.com/gocql/gocql"
 	"github.com/scylladb/gocqlx/v2"
@@ -34,7 +36,7 @@ func reserveRandomSeat(session *gocqlx.Session, id int) {
 		}
 
 		if len(emptySeats) == 0 {
-			fmt.Println("No empty seats")
+			// fmt.Println("No empty seats")
 			continue
 		}
 		seatToReserve := emptySeats[rand.Intn(len(emptySeats))]
@@ -85,6 +87,8 @@ func logger(session *gocqlx.Session) {
 
 			ratio := float32(len(emptySeats)) / float32(game.Capacity)
 			fmt.Printf("%v, %s, %s, tickets left: %f\n", game.GameId, game.GameTeam1, game.GameTeam2, ratio)
+
+			time.Sleep(500 * time.Millisecond)
 		}
 	}
 }
@@ -161,7 +165,7 @@ func main() {
 		panic(err)
 	}
 
-	// initTables(&session)
+	initTables(&session)
 	session.Close()
 
 	cluster.Keyspace = "tickets"
@@ -173,9 +177,9 @@ func main() {
 
 	endChan := make(chan (bool))
 
-	// matches.CreateMatches(&session)
+	matches.CreateMatches(&session)
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 20; i++ {
 		go reserveRandomSeat(&session, i)
 	}
 	go logger(&session)
